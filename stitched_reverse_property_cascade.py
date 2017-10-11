@@ -57,6 +57,14 @@ def stitched_reverse_property_cascade(halo, propertyList, maximumSkips=5, cutoff
                                         #Too bad, there are no central black holes to do this with.  Abort.
                                         break
 
+				problemHole = holeBeforeProblem.previous
+				if problemHole is None:
+					#The BH just got seeded and there's nothing else to do.
+					break
+				elif problemHole['host_halo'] == problemHalo:
+					#There was no problem with identifying the halo; something else went wrong.  Maybe a key you're after went missing.
+					break
+
                                 if holeBeforeProblem['BH_central_distance'] > cutoffDistance:
                                         #Alas, that's not much of a central black hole.  Abort.
                                         break
