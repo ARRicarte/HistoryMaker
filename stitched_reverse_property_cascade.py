@@ -31,10 +31,14 @@ def stitched_reverse_property_cascade(halo, propertyList, maximumSkips=5, cutoff
         outputList = [[] for prop in propertyList]
 
         while True:
-                #Do a reverse property cascade and append to output
-                cascadedProperties = halo.reverse_property_cascade(*propertyList)
-		for i in range(len(propertyList)):
-			outputList[i].extend(cascadedProperties[i].tolist())
+		try:
+			#Do a reverse property cascade and append to output
+			cascadedProperties = halo.reverse_property_cascade(*propertyList)
+			for i in range(len(propertyList)):
+				outputList[i].extend(cascadedProperties[i].tolist())
+		except NoResultsError:
+			#Missing properties that you wanted.
+			break
 
                 if len(outputList[0]) == expectedLength:
                         #You did it!
@@ -61,9 +65,15 @@ def stitched_reverse_property_cascade(halo, propertyList, maximumSkips=5, cutoff
 				if problemHole is None:
 					#The BH just got seeded and there's nothing else to do.
 					break
-				elif problemHole['host_halo'] == problemHalo:
-					#There was no problem with identifying the halo; something else went wrong.  Maybe a key you're after went missing.
-					break
+				if 'host_halo' in problemHole.keys():
+					#Make sure there really is a kink in the tree going forward in time.
+					relatedHalos = problemHalo['ptcls_in_common']
+					if not hasattr(relatedHalos, '__len__'):
+						relatedHalos = [relatedHalos]
+					redshiftsOfChildHalos = [h.timestep.redshift for h in relatedHalos]
+					if (redshiftsOfChildHalos.count(latestHalo.timestep.redshift) == 1) & (latestHalo in relatedHalos):
+						#There was no problem with identifying the halo; something else went wrong.  Maybe a key you're after went missing.
+						break
 
                                 if holeBeforeProblem['BH_central_distance'] > cutoffDistance:
                                         #Alas, that's not much of a central black hole.  Abort.
