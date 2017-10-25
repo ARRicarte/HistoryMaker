@@ -12,7 +12,7 @@ import cPickle as pickle
 
 class HistoryPlotter(object):
 
-	def __init__(self, inputPickleName, showMergers=False, showDistance=True, smoothingWidth=3, \
+	def __init__(self, inputPickleName, showMergers=True, showDistance=False, showPressure=True, smoothingWidth=3, \
 		outputDirectory=None, majorMergerThreshold=0.25):
 		"""
 		Read in dictionary that includes all history data.
@@ -29,6 +29,7 @@ class HistoryPlotter(object):
 		self.showMergers = showMergers
 		self.majorMergerThreshold = majorMergerThreshold
 		self.showDistance = showDistance
+		self.showPressure = showPressure
 		if outputDirectory is not None:
 			if outputDirectory[-1] != '/':
 				outputDirectory = outputDirectory + '/'
@@ -81,7 +82,25 @@ class HistoryPlotter(object):
 		ax_dist.set_ylim(0,3)
 		ax_dist.set_ylabel(r"$D_\mathrm{Center}/R_\mathrm{vir,cluster}$", fontsize=16)
 
-	def plotGrowth(self, haloNumberList):
+	def _addPressureAxis(self, ax, haloNumber):
+		"""
+		Add a ram pressure axis
+		"""
+
+		try:
+                        pressure = self.historyBook[haloNumber]['ramPressure']
+                except KeyError:
+                        print "Warning: Ram pressure information not available for halo number {0}.".format(haloNumber)
+                        return
+
+		ax_pres = ax.twinx()
+		ax_pres.plot(self.historyBook[haloNumber]['time'], pressure, lw=2, color='orange', ls='--')
+		ax_pres.set_xlim(self.historyBook[haloNumber]['time'][0], self.historyBook[haloNumber]['time'][-1])
+		ax_pres.set_ylim(3e-15,1e-10)
+		ax_pres.set_yscale('log')
+		ax_pres.set_ylabel(r"$P_\mathrm{ram}$ [Pa]", fontsize=16)
+
+	def plotGrowth(self, haloNumberList, showGas=False):
 		"""
 		BHAR and SFR
 		"""
@@ -89,24 +108,29 @@ class HistoryPlotter(object):
 		haloNumbers = np.atleast_1d(haloNumberList)
 		for haloNumber in haloNumbers:
 			fig, ax = plt.subplots()
+			hasBH = 'Mbh' in self.historyBook[haloNumber].keys()
 
 			#Smooth data
 			smooth_sfr = np.convolve(self.historyBook[haloNumber]['SFR'], self._smoothingKernel, mode='same')
-			smooth_bhar = np.convolve(self.historyBook[haloNumber]['BHAR'], self._smoothingKernel, mode='same')
+			if hasBH:
+				smooth_bhar = np.convolve(self.historyBook[haloNumber]['BHAR'], self._smoothingKernel, mode='same')
 			time = self.historyBook[haloNumber]['time']
 
-			#Let's also estimate the amount of gas mass depletion unexplained by SFR or BHAR.
-			mgas = self.historyBook[haloNumber]['Mgas']
-			dMdt_total = np.zeros(time.shape)
-			dMdt_total[1:-1] = (mgas[2:] - mgas[:-2]) / (time[2:] - time[:-2])
-			dMdt_total[0] = (mgas[1] - mgas[0]) / (time[1] - time[0])
-			dMdt_total[-1] = (mgas[-1] - mgas[-2]) / (time[-1] - time[-2])
-			dMdt_total /= 1e9
+			#Let's also estimate the amount of gas mass depletion.
+			if showGas:
+				mgas = self.historyBook[haloNumber]['Mgas']
+				dMdt_total = np.zeros(time.shape)
+				dMdt_total[1:-1] = (mgas[2:] - mgas[:-2]) / (time[2:] - time[:-2])
+				dMdt_total[0] = (mgas[1] - mgas[0]) / (time[1] - time[0])
+				dMdt_total[-1] = (mgas[-1] - mgas[-2]) / (time[-1] - time[-2])
+				dMdt_total /= 1e9
 
 			#Plot
 			ax.plot(time, smooth_sfr, lw=2, color='b', ls='-', label=r"$\dot{M}_*$")
-			ax.plot(time, smooth_bhar/7e-4, lw=2, color='g', ls='-', label=r"$\dot{M}_\bullet$/7e-4")
-			ax.plot(time, -1*dMdt_total, lw=2, color='r', ls='-', label=r"$-\dot{M}_g$")
+			if hasBH:
+				ax.plot(time, smooth_bhar/7e-4, lw=2, color='g', ls='-', label=r"$\dot{M}_\bullet$/7e-4")
+			if showGas:
+				ax.plot(time, -1*dMdt_total, lw=2, color='r', ls='-', label=r"$-\dot{M}_g$")
 
 			#Format
 			ax.set_xlim(time[0], time[-1])
@@ -121,6 +145,8 @@ class HistoryPlotter(object):
 				self._addMergerMarkers(ax, haloNumber)
 			if self.showDistance:
 				self._addDistanceAxis(ax, haloNumber)
+			if self.showPressure:
+                                self._addPressureAxis(ax, haloNumber)
 
 			fig.tight_layout()
 
@@ -140,14 +166,17 @@ class HistoryPlotter(object):
 		for haloNumber in haloNumbers:
 			fig, ax = plt.subplots()
 
+			hasBH = 'Mbh' in self.historyBook[haloNumber].keys()
 			#Smooth data
 			smooth_ssfr = np.convolve(self.historyBook[haloNumber]['SFR']/self.historyBook[haloNumber]['Mstar'], self._smoothingKernel, mode='same')
-			smooth_sbhar = np.convolve(self.historyBook[haloNumber]['BHAR']/self.historyBook[haloNumber]['Mbh'], self._smoothingKernel, mode='same')
+			if hasBH:
+				smooth_sbhar = np.convolve(self.historyBook[haloNumber]['BHAR']/self.historyBook[haloNumber]['Mbh'], self._smoothingKernel, mode='same')
 			time = self.historyBook[haloNumber]['time']
 			
 			#Plot
 			ax.plot(time, smooth_ssfr, lw=2, color='b', ls='-', label=r"$\dot{M}_*/M_*$")
-			ax.plot(time, smooth_sbhar, lw=2, color='g', ls='-', label=r"$\dot{M}_\bullet/M_\bullet$")
+			if hasBH:
+				ax.plot(time, smooth_sbhar, lw=2, color='g', ls='-', label=r"$\dot{M}_\bullet/M_\bullet$")
 
 			#Format
 			ax.set_yscale('log')
@@ -163,6 +192,8 @@ class HistoryPlotter(object):
 				self._addMergerMarkers(ax, haloNumber)
 			if self.showDistance:
 				self._addDistanceAxis(ax, haloNumber)
+			if self.showPressure:
+                                self._addPressureAxis(ax, haloNumber)
 
                         fig.tight_layout()
 
@@ -176,24 +207,29 @@ class HistoryPlotter(object):
 
 	def plotMass(self, haloNumberList):
 		"""
-		Mstar, Mbh, Mvir, Mgas
+		Mstar, Mbh, Mvir, Mgas, Mcold
 		"""
 		haloNumbers = np.atleast_1d(haloNumberList)
                 for haloNumber in haloNumbers:
                         fig, ax = plt.subplots()
-        
+			hasBH = 'Mbh' in self.historyBook[haloNumber].keys()
+
                         #Get data.  It is assumed that these do not need smoothing.
 			time = self.historyBook[haloNumber]['time']
 			mvir = self.historyBook[haloNumber]['Mvir']
 			mstar = self.historyBook[haloNumber]['Mstar']
-			mbh = self.historyBook[haloNumber]['Mbh']
+			if hasBH:
+				mbh = self.historyBook[haloNumber]['Mbh']
 			mgas = self.historyBook[haloNumber]['Mgas']
+			mcold = self.historyBook[haloNumber]['Mcold']
 
 			#Plot
-			ax.plot(time, mvir, color='purple', lw=2, ls='-', label=r"$M_\mathrm{vir}$")
+			ax.plot(time, mvir, color='k', lw=2, ls='-', label=r"$M_\mathrm{vir}$")
 			ax.plot(time, mstar, color='b', lw=2, ls='-', label=r"$M_*$")
-			ax.plot(time, mbh, color='g', lw=2, ls='-', label=r"$M_\bullet$")
+			if hasBH:
+				ax.plot(time, mbh, color='g', lw=2, ls='-', label=r"$M_\bullet$")
 			ax.plot(time, mgas, color='brown', lw=2, ls='-', label=r"$M_\mathrm{gas}$")
+			ax.plot(time, mcold, color='indigo', lw=2, ls='-', label=r"$M_\mathrm{cold}$")
 
 			#Format
 			ax.set_yscale('log')
@@ -210,6 +246,8 @@ class HistoryPlotter(object):
 				self._addMergerMarkers(ax, haloNumber)
 			if self.showDistance:
 				self._addDistanceAxis(ax, haloNumber)
+			if self.showPressure:
+				self._addPressureAxis(ax, haloNumber)
 
                         fig.tight_layout()
 

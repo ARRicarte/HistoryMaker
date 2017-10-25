@@ -32,46 +32,61 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 	:returns historyBook - a dictionary of various pre-determined arrays
 	"""
 
-	#These are the properties we will trace backwards in time.
-	rawProperties = ["t()", "halo_number()", "Mstar", "raw(SFR_histogram)", "Mvir", "Rvir", "Mgas", "SSC"]
-	rawBlackHoleProperties = ['BH_mass', 'raw(BH_mdot_histogram)', 'BH_central_distance']
-	allRawProperties = rawProperties + [bhString+'.'+rawBHProp for rawBHProp in rawBlackHoleProperties]
+	#The existence of a black hole will add keys.
+	hasBH = 'BH_central' in halo.keys()
 
-	#And their nicer names once the dictionary is made.
-	dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "Rvir", "Mgas", "SSC", \
-	"Mbh", "BHAR", "Dbh"]
+	#These are the properties we will trace backwards in time.
+	rawProperties = ["t()", "halo_number()", "Mstar", "raw(SFR_histogram)", "Mvir", "Rvir", "Mgas", "MColdGas", "SSC", "Vcom"]
+	if hasBH:
+		rawBlackHoleProperties = ['BH_mass', 'raw(BH_mdot_histogram)', 'BH_central_distance']
+		allRawProperties = rawProperties + [bhString+'.'+rawBHProp for rawBHProp in rawBlackHoleProperties]
+		dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "Rvir", "Mgas", "Mcold", "SSC", "Vcom", \
+		"Mbh", "BHAR", "Dbh"]
+	else:
+		allRawProperties = rawProperties
+		dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "Rvir", "Mgas", "Mcold", "SSC", "Vcom"]
 
 	#Get all the properties
 	print "Querying database with a stitched_reverse_property_cascade."
-	time, haloNumber, mstar, sfr, mvir, rvir, mgas, ssc, mbh, bhar, dbh = stitched_reverse_property_cascade(halo, allRawProperties, \
-	maximumSkips=maximumSkips, cutoffDistance=cutoffDistance)
+	if hasBH:
+		time, haloNumber, mstar, sfr, mvir, rvir, mgas, mcold, ssc, vel, mbh, bhar, dbh = stitched_reverse_property_cascade(halo, allRawProperties, \
+		maximumSkips=maximumSkips, cutoffDistance=cutoffDistance)
+	else:
+		time, haloNumber, mstar, sfr, mvir, rvir, mgas, mcold, ssc, vel = stitched_reverse_property_cascade(halo, allRawProperties, \
+                maximumSkips=maximumSkips, cutoffDistance=cutoffDistance)
 
 	#For the histograms, some assembly is required.
 	print "Processing histograms."	
-	combinedBHAR = np.zeros(bin_index(time[0]))
 	combinedSFR = np.zeros(bin_index(time[0]))
-	tracedMbh = np.zeros(bin_index(time[0]))
 
-	for t_i, m_i, bhar_i, sfr_i in zip(time, mbh, bhar, sfr):
+	for t_i, sfr_i in zip(time, sfr):
 		#The start and end indices have overlap; don't worry.  Histograms go back a fixed time.
                 end = bin_index(t_i)
-                start = np.max((end - len(bhar_i), 0))
+                start = np.max((end - len(sfr_i), 0))
 
 		#Raw SFR info is in solar masses per Gyr, for some reason.
 		sfr_i = [val/1e9 for val in sfr_i]
-
-		#Contingency in case a BH is detected in one step, but not a nearby one.
-		combinedBHAR[start:end] = np.maximum(bhar_i[-(end-start):], combinedBHAR[start:end])
-		combinedBHAR[start:end] = bhar_i[-(end-start):]
 		combinedSFR[start:end] = sfr_i
 
-		#Retrace black hole mass with the resolution of the histogram.  Cannot account for BH mergers.
-		cumulativeBHAR = np.cumsum(bhar_i) * tmax_Gyr * 1e9 / nbins
-		cumulativeBHAR -= cumulativeBHAR[-1]
-		tracedMbh[start:end] = cumulativeBHAR + m_i
+	if hasBH:
+		combinedBHAR = np.zeros(bin_index(time[0]))
+		tracedMbh = np.zeros(bin_index(time[0]))
+		for t_i, m_i, bhar_i in zip(time, mbh, bhar):
+			#The start and end indices have overlap; don't worry.  Histograms go back a fixed time.
+			end = bin_index(t_i)
+			start = np.max((end - len(bhar_i), 0))
+
+			#Contingency in case a BH is detected in one step, but not a nearby one.
+			combinedBHAR[start:end] = np.maximum(bhar_i[-(end-start):], combinedBHAR[start:end])
+			combinedBHAR[start:end] = bhar_i[-(end-start):]
+
+			#Retrace black hole mass with the resolution of the histogram.  Cannot account for BH mergers.
+			cumulativeBHAR = np.cumsum(bhar_i) * tmax_Gyr * 1e9 / nbins
+			cumulativeBHAR -= cumulativeBHAR[-1]
+			tracedMbh[start:end] = cumulativeBHAR + m_i
 
 	#This is a denser time axis than time, corresponding to the values in combinedBHAR and combinedSFR
-	tracedTime = time[0] - np.arange(len(combinedBHAR)-1,-1,-1)*tmax_Gyr/nbins
+	tracedTime = time[0] - np.arange(len(combinedSFR)-1,-1,-1)*tmax_Gyr/nbins
 
 	#Trace stars.  Not doing the same thing as I do with Mbh due to stripping, accretion, and uncertainties with halo finding.
 	tracedMstar = np.interp(tracedTime, np.flipud(time), np.flipud(mstar), left=0)
@@ -80,7 +95,9 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 	tracedMvir = np.interp(tracedTime, np.flipud(time), np.flipud(mvir), left=0)
 	tracedRvir = np.interp(tracedTime, np.flipud(time), np.flipud(rvir), left=0)
 	tracedMgas = np.interp(tracedTime, np.flipud(time), np.flipud(mgas), left=0)
-	tracedDbh = np.interp(tracedTime, np.flipud(time), np.flipud(dbh), left=np.inf)
+	tracedMcold = np.interp(tracedTime, np.flipud(time), np.flipud(mcold), left=0)
+	if hasBH:
+		tracedDbh = np.interp(tracedTime, np.flipud(time), np.flipud(dbh), left=np.inf)
 
 	#Interpolating each dimension of space separately, then combining.
 	ssc = np.array(ssc)
@@ -89,9 +106,20 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 	tracedz = np.interp(tracedTime, np.flipud(time), np.flipud(ssc[:,2]), left=np.inf)
 	tracedCoordinates = np.vstack((tracedx, tracedy, tracedz))
 
+	#The same must be done for velocities
+	vel = np.array(vel)
+        tracedvx = np.interp(tracedTime, np.flipud(time), np.flipud(vel[:,0]), left=0)
+        tracedvy = np.interp(tracedTime, np.flipud(time), np.flipud(vel[:,1]), left=0)
+        tracedvz = np.interp(tracedTime, np.flipud(time), np.flipud(vel[:,2]), left=0)
+        tracedVelocities = np.vstack((tracedvx, tracedvy, tracedvz))
+
 	#Combine everything into a dictionary
-	historyBook = {"time": tracedTime, "haloNumber": np.array(haloNumber), "Mstar": tracedMstar, "SFR": combinedSFR, "Mvir": tracedMvir, \
-	"Rvir": tracedRvir, "Mgas": tracedMgas, "SSC": tracedCoordinates, "Mbh": tracedMbh, "BHAR": combinedBHAR, "Dbh": tracedDbh}
+	if hasBH:
+		historyBook = {"time": tracedTime, "haloNumber": np.array(haloNumber), "Mstar": tracedMstar, "SFR": combinedSFR, "Mvir": tracedMvir, \
+		"Rvir": tracedRvir, "Mgas": tracedMgas, "Mcold": tracedMcold, "SSC": tracedCoordinates, "Vcom": tracedVelocities, "Mbh": tracedMbh, "BHAR": combinedBHAR, "Dbh": tracedDbh}
+	else:
+		historyBook = {"time": tracedTime, "haloNumber": np.array(haloNumber), "Mstar": tracedMstar, "SFR": combinedSFR, "Mvir": tracedMvir, \
+                "Rvir": tracedRvir, "Mgas": tracedMgas, "Mcold": tracedMcold, "SSC": tracedCoordinates, "Vcom": tracedVelocities}
 
 	return historyBook
 

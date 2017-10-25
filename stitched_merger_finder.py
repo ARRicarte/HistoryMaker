@@ -23,8 +23,8 @@ def stitched_merger_finder(halo, maximumSkips=5, cutoffDistance=2, massForRatio=
         center of its host halo for tracking
 	:kwarg massForRatio - the key to use for mass ratios
 
-        :returns mergerTimes -  
-	:returns mergerRatios - 
+        :returns mergerTimes - 2d array of merger times, since we only know the interval of merger times
+	:returns mergerRatios - ratios taken with the mass specified
         """
 
 	#First, get all progenitor halos in this roundabout way.

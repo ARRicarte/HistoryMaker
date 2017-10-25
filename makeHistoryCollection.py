@@ -8,14 +8,17 @@ import tangos as db
 from tangos.live_calculation import NoResultsError
 import matplotlib.pyplot as plt
 from getSuitableHalos import *
+from stitched_merger_finder import *
 from makeHistory import *
+from clusterProfiler_powerlaw import *
 import cPickle as pickle
 import time
 import smtplib
+import constants
 from email.mime.text import MIMEText
 
 def createHistoryCollection(step, pickleName, maximumSkips=5, cutoffDistance=2, minStellarMass=1e8, contaminationTolerance=0.05, \
-	minDarkParticles=1e4, requireBH=True, emailAddress=None):
+	minDarkParticles=1e4, requireBH=True, emailAddress=None, computeRamPressure=True, computeMergers=True, massForRatio='Mstar'):
 	"""
 	Create a dictionary of histories.
 
@@ -52,6 +55,12 @@ def createHistoryCollection(step, pickleName, maximumSkips=5, cutoffDistance=2, 
 			print "   FAILED"
 			failedHaloNumbers.append(haloNumber)
 			pass
+		if computeMergers:
+			mergerTimes, mergerRatios = stitched_merger_finder(haloList[h_index], maximumSkips=maximumSkips, \
+                        cutoffDistance=cutoffDistance, massForRatio=massForRatio)
+                        historyCollection[haloNumber]['mergerTimes'] = mergerTimes
+                        historyCollection[haloNumber]['mergerRatios'] = mergerRatios
+
 
 	#Adding one new key:  The distance from the cluster center
 	try:
@@ -60,7 +69,7 @@ def createHistoryCollection(step, pickleName, maximumSkips=5, cutoffDistance=2, 
 		print "Computing cluster distances."
 		for h_index in range(len(haloList)):
 			haloNumber = haloList[h_index].halo_number
-			if haloNumber == 1:
+			if (haloNumber == 1) | (haloNumber in failedHaloNumbers):
 				continue
 			else:
 				displacement = historyCollection[haloNumber]['SSC'] - clusterCoordinates
@@ -70,6 +79,21 @@ def createHistoryCollection(step, pickleName, maximumSkips=5, cutoffDistance=2, 
 		#The cluster coordinates aren't in this set.
 		pass
 
+	#Adding another key:  ram pressure
+	if computeRamPressure:
+		cp = ClusterProfiler(step)
+		clusterVelocity = historyCollection[1]['Vcom']
+		for h_index in range(len(haloList)):
+			haloNumber = haloList[h_index].halo_number
+			if (haloNumber == 1) | (haloNumber in failedHaloNumbers):
+				continue
+			else:
+				clusterDensity = cp.computeGasDensity(historyCollection[haloNumber]['clusterDistance'], \
+				historyCollection[haloNumber]['time'])
+				relativeVelocities = historyCollection[haloNumber]['Vcom'] - clusterVelocity
+				relativeSpeedSquared = np.array([np.dot(relativeVelocities[:,i],relativeVelocities[:,i]) for i in range(relativeVelocities.shape[1])])
+				historyCollection[haloNumber]['ramPressure'] = clusterDensity * relativeSpeedSquared * constants.M_sun / (constants.pc * 1e3)**3 * 1e6
+	
 	#Pickle the output
 	historyCollection['failedHaloNumbers'] = failedHaloNumbers
 	with open(pickleName, 'w') as myfile:

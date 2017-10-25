@@ -13,35 +13,50 @@ class ClusterProfiler(object):
 
 		#Obtain data
 		clusterHalo = step.halos[0]
-		redshifts, profiles, Rvir = clusterHalo.reverse_property_cascade('z()', 'gas_density_profile', 'Rvir')
+		times, profiles, Rvir = clusterHalo.reverse_property_cascade('t()', 'gas_density_profile', 'Rvir')
 		logInterpolationFunctions = []
 
 		#At each time step, compute the profile.
-		for z_index in range(len(redshifts)):
-			xvalues = np.arange(len(profiles[z_index]))*0.1 / Rvir[z_index]
-			logInterpolationFunctions.append(interp1d(np.log10(xvalues), np.log10(profiles[z_index]), bounds_error=False, fill_value=-np.inf))
+		for t_index in range(len(times)):
+			xvalues = np.arange(len(profiles[t_index]))*0.1 / Rvir[t_index]
 
-		self.redshifts = redshifts
+			#Masking zeroes for better interpolation behavior.
+			isZero = profiles[t_index] == 0
+	
+			#Also, let's get rid of kooky behavior within 0.05 Rvir
+			sufficientlyFar = xvalues > 0.05
+
+			logInterpolationFunctions.append(interp1d(np.log10(xvalues[(~isZero) & (sufficientlyFar)]), \
+			np.log10(profiles[t_index][(~isZero) & (sufficientlyFar)]), bounds_error=False, \
+			fill_value=(np.log10(profiles[t_index][~isZero][0]),-np.inf)))
+
+		self.times = times
 		self.logInterpolationFunctions = logInterpolationFunctions
 
-	def _selectNearestFunction(self, redshift):
+	def _selectNearestFunction(self, time):
 		"""
-		Given a redshift, find the closest one for which we have data and return the function.
-		"""
-
-		return self.logInterpolationFunctions[np.argmin(np.abs(self.redshifts-redshift))]
-
-	def computeGasDensity(self, distanceInRvir, redshift):
-		"""
-		Use interpolation functions to solve for gas density as a function of distance and redshift.
+		Given a time, find the closest one for which we have data and return the function.
 		"""
 
-		#Profile data do not go forever.
-		if redshift > self.redshifts[-1]:
-			return 0
+		return self.logInterpolationFunctions[np.argmin(np.abs(self.times-time))]
 
-		#First, find the nearest redshift and get its interpolation function.
-		interpFunct = self._selectNearestFunction(redshift)
+	def computeGasDensity(self, distanceInRvir, timeArr):
+		"""
+		Use interpolation functions to solve for gas density as a function of distance and time.
+		"""
 
-		#Next, interpolate in log space.
-		return 10**interpFunct(np.log10(distanceInRvir))
+		if not hasattr(distanceInRvir, '__len__'):
+			distanceInRvir = np.array([distanceInRvir])
+		if not hasattr(timeArr, '__len__'):
+			timeArr = np.full(len(distanceInRvir), timeArr)
+		output = np.zeros(len(distanceInRvir))
+
+		#First, find the nearest time and get its interpolation function.
+		for d_index in range(len(distanceInRvir)):
+			if timeArr[d_index] < self.times[-1]:
+				output[d_index] = 0
+			else:
+				interpFunct = self._selectNearestFunction(timeArr[d_index])
+				output[d_index] = 10**interpFunct(np.log10(distanceInRvir[d_index]))
+
+		return output
