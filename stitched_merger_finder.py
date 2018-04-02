@@ -60,7 +60,7 @@ def stitched_merger_finder(halo, maximumSkips=5, cutoffDistance=2, massForRatio=
 		children = [halo for halo in relatives if (halo.timestep.time_gyr == previousTime)]
 
 		#Only continue if there is more than one child.
-		if len(children) == 1:
+		if len(children) < 2:
 			continue
 
 		#If you've made it this far, you can compute mass ratios and times.

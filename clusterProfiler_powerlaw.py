@@ -14,7 +14,7 @@ class ClusterProfiler(object):
 
 		#Obtain data
 		clusterHalo = step.halos[0]
-		times, profiles, Rvir = clusterHalo.reverse_property_cascade('t()', 'gas_density_profile', 'Rvir')
+		times, profiles, Rvir = clusterHalo.reverse_property_cascade('t()', 'gas_density_profile', 'radius(200)')
 		lineSlopes = []
 		lineIntercepts = []
 

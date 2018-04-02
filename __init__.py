@@ -6,3 +6,5 @@ from getSuitableHalos import *
 from makeHistoryCollection import *
 from plotHistoryCollection import *
 from clusterProfiler_powerlaw import *
+from useProximityTable import *
+from plotProximityHistory import *

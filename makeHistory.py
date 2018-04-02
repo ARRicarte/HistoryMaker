@@ -36,15 +36,26 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 	hasBH = 'BH_central' in halo.keys()
 
 	#These are the properties we will trace backwards in time.
-	rawProperties = ["t()", "halo_number()", "Mstar", "raw(SFR_histogram)", "Mvir", "Rvir", "Mgas", "MColdGas", "SSC", "Vcom"]
-	if hasBH:
-		rawBlackHoleProperties = ['BH_mass', 'raw(BH_mdot_histogram)', 'BH_central_distance']
-		allRawProperties = rawProperties + [bhString+'.'+rawBHProp for rawBHProp in rawBlackHoleProperties]
-		dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "Rvir", "Mgas", "Mcold", "SSC", "Vcom", \
-		"Mbh", "BHAR", "Dbh"]
-	else:
-		allRawProperties = rawProperties
-		dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "Rvir", "Mgas", "Mcold", "SSC", "Vcom"]
+	if halo.timestep.simulation.basename == 'cosmo25':
+		rawProperties = ["t()", "halo_number()", "Mstar", "raw(SFR_histogram)", "Mvir", "radius(200)", "Mgas", "Mcold", "shrink_center"]
+		if hasBH:
+			rawBlackHoleProperties = ['BH_mass', 'raw(BH_mdot_histogram)', 'BH_central_distance']
+			allRawProperties = rawProperties + [bhString+'.'+rawBHProp for rawBHProp in rawBlackHoleProperties]
+			dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "R200", "Mgas", "Mcold", "SSC", \
+			"Mbh", "BHAR", "Dbh"]
+		else:
+			allRawProperties = rawProperties
+			dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "R200", "Mgas", "Mcold", "SSC"]
+	elif halo.timestep.simulation.basename == 'h1.cosmo50':
+		rawProperties = ["t()", "halo_number()", "Mstar", "raw(SFR_histogram)", "Mvir", "radius(200)", "Mgas", "MColdGas", "shrink_center", "Vcom"]
+		if hasBH:
+			rawBlackHoleProperties = ['BH_mass', 'raw(BH_mdot_histogram)', 'BH_central_distance']
+			allRawProperties = rawProperties + [bhString+'.'+rawBHProp for rawBHProp in rawBlackHoleProperties]
+			dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "R200", "Mgas", "Mcold", "SSC", "Vcom", \
+			"Mbh", "BHAR", "Dbh"]
+		else:
+			allRawProperties = rawProperties
+			dictionaryNames = ["Time", "haloNumber", "Mstar", "SFR", "Mvir", "R200", "Mgas", "Mcold", "SSC", "Vcom"]
 
 	#Get all the properties
 	print "Querying database with a stitched_reverse_property_cascade."
@@ -78,7 +89,6 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 
 			#Contingency in case a BH is detected in one step, but not a nearby one.
 			combinedBHAR[start:end] = np.maximum(bhar_i[-(end-start):], combinedBHAR[start:end])
-			combinedBHAR[start:end] = bhar_i[-(end-start):]
 
 			#Retrace black hole mass with the resolution of the histogram.  Cannot account for BH mergers.
 			cumulativeBHAR = np.cumsum(bhar_i) * tmax_Gyr * 1e9 / nbins
@@ -93,7 +103,7 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 
 	#Get everything else to the same time resolution by interpolation.
 	tracedMvir = np.interp(tracedTime, np.flipud(time), np.flipud(mvir), left=0)
-	tracedRvir = np.interp(tracedTime, np.flipud(time), np.flipud(rvir), left=0)
+	tracedR200 = np.interp(tracedTime, np.flipud(time), np.flipud(rvir), left=0)
 	tracedMgas = np.interp(tracedTime, np.flipud(time), np.flipud(mgas), left=0)
 	tracedMcold = np.interp(tracedTime, np.flipud(time), np.flipud(mcold), left=0)
 	if hasBH:
@@ -116,10 +126,11 @@ def makeHistory(halo, bhString="bh('BH_central_distance', 'min', 'BH_central')",
 	#Combine everything into a dictionary
 	if hasBH:
 		historyBook = {"time": tracedTime, "haloNumber": np.array(haloNumber), "Mstar": tracedMstar, "SFR": combinedSFR, "Mvir": tracedMvir, \
-		"Rvir": tracedRvir, "Mgas": tracedMgas, "Mcold": tracedMcold, "SSC": tracedCoordinates, "Vcom": tracedVelocities, "Mbh": tracedMbh, "BHAR": combinedBHAR, "Dbh": tracedDbh}
+		"R200": tracedR200, "Mgas": tracedMgas, "Mcold": tracedMcold, "SSC": tracedCoordinates, "Vcom": tracedVelocities, "t_slice": time, \
+		"Mbh": tracedMbh, "BHAR": combinedBHAR, "Dbh": tracedDbh}
 	else:
 		historyBook = {"time": tracedTime, "haloNumber": np.array(haloNumber), "Mstar": tracedMstar, "SFR": combinedSFR, "Mvir": tracedMvir, \
-                "Rvir": tracedRvir, "Mgas": tracedMgas, "Mcold": tracedMcold, "SSC": tracedCoordinates, "Vcom": tracedVelocities}
+                "R200": tracedR200, "Mgas": tracedMgas, "Mcold": tracedMcold, "SSC": tracedCoordinates, "Vcom": tracedVelocities, "t_slice": time}
 
 	return historyBook
 

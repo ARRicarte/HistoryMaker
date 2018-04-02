@@ -14,12 +14,20 @@ def getSuitableHalos(step, minStellarMass=1e8, contaminationTolerance=0.05, minD
         """
 
         #Making sure that we're in the zoom-in region, and not too contaminated.
-	if requireBH:
-		hid, mstar, ndm, mbh, contamination = step.gather_property('halo_number()', 'Mstar', 'NDM()', "bh().BH_mass", 'contamination_fraction')
-		goodHalos = (contamination < contaminationTolerance) & (mstar >= minStellarMass) & (ndm >= minDarkParticles) & (mbh > 0)
+	if contaminationTolerance is None:
+		if requireBH:
+			hid, mstar, ndm, mbh = step.gather_property('halo_number()', 'Mstar', 'NDM()', "bh().BH_mass")
+			goodHalos = (mstar >= minStellarMass) & (ndm >= minDarkParticles) & (mbh > 0)
+		else:
+			hid, mstar, ndm = step.gather_property('halo_number()', 'Mstar', 'NDM()')
+			goodHalos = (mstar >= minStellarMass) & (ndm >= minDarkParticles)
 	else:
-		hid, mstar, ndm, contamination = step.gather_property('halo_number()', 'Mstar', 'NDM()', 'contamination_fraction')
-		goodHalos = (contamination < contaminationTolerance) & (mstar >= minStellarMass) & (ndm >= minDarkParticles)
+		if requireBH:
+			hid, mstar, ndm, mbh, contamination = step.gather_property('halo_number()', 'Mstar', 'NDM()', "bh().BH_mass", 'contamination_fraction')
+			goodHalos = (contamination < contaminationTolerance) & (mstar >= minStellarMass) & (ndm >= minDarkParticles) & (mbh > 0)
+		else:
+			hid, mstar, ndm, contamination = step.gather_property('halo_number()', 'Mstar', 'NDM()', 'contamination_fraction')
+			goodHalos = (contamination < contaminationTolerance) & (mstar >= minStellarMass) & (ndm >= minDarkParticles)
 
         goodHaloNumbers = hid[goodHalos]
         goodHaloMasses = mstar[goodHalos]
